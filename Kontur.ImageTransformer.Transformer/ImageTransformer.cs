@@ -17,6 +17,7 @@ namespace Kontur.ImageTransformer.Transformer
         {
             byte[] result;
             Rectangle cropRectangle = new Rectangle(parametrs.TopLeftConerX, parametrs.TopLeftConerY, parametrs.Width, parametrs.Height);
+            if(cropRectangle.Width==0||cropRectangle.Height==0) throw new ArgumentOutOfRangeException("Пустая область");
             using (MemoryStream inStream = new MemoryStream(img))
             {
                 using (MemoryStream outStream = new MemoryStream())
@@ -38,7 +39,7 @@ namespace Kontur.ImageTransformer.Transformer
                         }
                         catch (ArgumentOutOfRangeException)
                         {
-                            throw new ArgumentOutOfRangeException("Пустой квадрат");
+                            throw new ArgumentOutOfRangeException("Пустая область");
                         }
                         imageFactory.Save(outStream);
                     }

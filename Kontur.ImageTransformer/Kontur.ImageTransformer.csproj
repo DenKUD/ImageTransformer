@@ -51,5 +51,11 @@
   <ItemGroup>
     <None Include="App.config" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Kontur.ImageTransformer.Transformer\Kontur.ImageTransformer.Transformer.csproj">
+      <Project>{f00f1be9-0194-425a-8073-012e983bdc94}</Project>
+      <Name>Kontur.ImageTransformer.Transformer</Name>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

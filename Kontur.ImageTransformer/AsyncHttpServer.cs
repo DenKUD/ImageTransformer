@@ -3,6 +3,8 @@ using System.IO;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using Kontur.ImageTransformer.Transformer;
+using Kontur.ImageTransformer.Transformer.Model;
 
 namespace Kontur.ImageTransformer
 {
@@ -83,6 +85,7 @@ namespace Kontur.ImageTransformer
                 catch (Exception error)
                 {
                     // TODO: log errors
+                    Console.WriteLine(error.Message);
                 }
             }
         }
@@ -90,10 +93,55 @@ namespace Kontur.ImageTransformer
         private async Task HandleContextAsync(HttpListenerContext listenerContext)
         {
             // TODO: implement request handling
+            string paramString = listenerContext.Request.RawUrl;
+            paramString=paramString.Trim('/');
+            paramString = paramString.Replace('/', ' ');
+            byte[] inputImg;
+            byte[] outputImg;
+            TransformationParametrs tParams;
+            try
+            {
+                MemoryStream inStream = new MemoryStream();
+                await listenerContext.Request.InputStream.CopyToAsync(inStream);
+                inputImg = inStream.ToArray();
+            }
+            catch(Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                throw new Exception(ex.Message);
+            }
+            try
+            {
+                tParams = TransformationParametrs.Parse(paramString);
+            }
+            catch(ArgumentException ae)
+            {
+                Console.WriteLine(ae.Message);
+                listenerContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+                using (var writer = new StreamWriter(listenerContext.Response.OutputStream))
+                    await writer.WriteLineAsync();
+                throw new ArgumentException(ae.Message);
+            }
+
+            ImageTransformer.Transformer.ImageTransformer transformer = new ImageTransformer.Transformer.ImageTransformer();
+           
+            try
+            {
+               outputImg = transformer.Transform(inputImg, tParams);
+            }
+            catch(ArgumentOutOfRangeException aoorEx)
+            {
+                Console.WriteLine(aoorEx.Message);
+                listenerContext.Response.StatusCode = (int)HttpStatusCode.NoContent;
+                using (var writer = new StreamWriter(listenerContext.Response.OutputStream))
+                    await writer.WriteLineAsync();
+                throw new ArgumentOutOfRangeException(aoorEx.Message);
+            }
 
             listenerContext.Response.StatusCode = (int)HttpStatusCode.OK;
-            using (var writer = new StreamWriter(listenerContext.Response.OutputStream))
-                writer.WriteLine("Hello, world!");
+            using (var writer = new BinaryWriter(listenerContext.Response.OutputStream))
+                writer.Write(outputImg);
+           
         }
 
         private readonly HttpListener listener;
