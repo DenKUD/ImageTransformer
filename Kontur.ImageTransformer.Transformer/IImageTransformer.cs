@@ -9,7 +9,7 @@ namespace Kontur.ImageTransformer.Transformer
 {
     public interface IImageTransformer
     {
-         Image Transform(Image img,Model.TransformationParametrs parametrs);
+         byte[] Transform(byte[] img,Model.TransformationParametrs parametrs);
 
     }
 }

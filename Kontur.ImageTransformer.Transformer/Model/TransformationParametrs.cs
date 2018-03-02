@@ -20,16 +20,7 @@ namespace Kontur.ImageTransformer.Transformer.Model
             TransformationParametrs result = new TransformationParametrs();
             List<string> Params = new List<string>(paramString.Split(' '));
             string rotateFlipParametrs = Params[0];
-            /*
-            switch (rotateFlipParametrs)
-            {
-                case ("​rotate-cw") : result.Rotation = Rotation.Clockwise ; break;
-                case "rotate-ccw​": result.Rotation = Rotation.CounterClockwise; break;
-                case "flip-v"   : result.Flip = Flip.Vertical; break;
-                case ("flip-h")   : result.Flip = Flip.Horizontal; break;
-                default: throw new ArgumentException("Неверный формат строки");
-            }
-            */
+            
             if (rotateFlipParametrs.Equals("rotate-cw")) result.Rotation = Rotation.Clockwise;
             else if (rotateFlipParametrs.Equals("rotate-ccw")) result.Rotation = Rotation.CounterClockwise;
             else if (rotateFlipParametrs.Equals( "flip-v")) result.Flip = Flip.Vertical;
@@ -48,7 +39,27 @@ namespace Kontur.ImageTransformer.Transformer.Model
             {
                 throw new ArgumentException("Неверный формат строки");
             }
-
+            // Перерасчет координат обрезки
+            if (result.TopLeftConerX < 0 && result.Width>0)
+            {
+                result.Width = result.Width + result.TopLeftConerX;
+                result.TopLeftConerX = 0;
+            }
+            if (result.TopLeftConerY < 0 && result.Height > 0)
+            {
+                result.Height = result.Height + result.TopLeftConerY;
+                result.TopLeftConerY = 0;
+            }
+            if (result.TopLeftConerX > 0 && result.Width < 0)
+            {
+                result.TopLeftConerX = result.TopLeftConerX + result.Width;
+                result.Width *= -1;
+            }
+            if (result.TopLeftConerY > 0 && result.Height < 0)
+            {
+                result.TopLeftConerY = result.TopLeftConerY + result.Height;
+                result.Height *= -1;
+            }
             return result;
        }
     }

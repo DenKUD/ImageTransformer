@@ -5,55 +5,50 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Kontur.ImageTransformer.Transformer.Model;
+using System.Drawing.Imaging;
+using ImageProcessor;
+using System.IO;
 
 namespace Kontur.ImageTransformer.Transformer
 {
     public class ImageTransformer : IImageTransformer
     {
-        public Image Transform(Image img, TransformationParametrs parametrs)
+        public byte[] Transform(byte[] img, TransformationParametrs parametrs)
         {
-            Bitmap result = new Bitmap(img);
-            RotateFlipType rotation;
-            rotation = RotateFlipType.RotateNoneFlipNone;
-            if (parametrs.Rotation == Rotation.Clockwise) rotation = RotateFlipType.Rotate90FlipNone;
-            if (parametrs.Rotation == Rotation.CounterClockwise) rotation = RotateFlipType.Rotate270FlipNone;
-            if (parametrs.Flip == Flip.Horizontal) rotation = RotateFlipType.RotateNoneFlipX;
-            if (parametrs.Flip == Flip.Vertical) rotation = RotateFlipType.RotateNoneFlipY;
-            result.RotateFlip(rotation);
-            result = Cut(result, parametrs);
-            return result;
-        }
-        private Bitmap Cut(Bitmap img, TransformationParametrs parametrs)
-        {
-            Bitmap result = new Bitmap(parametrs.Width, parametrs.Height);
-            int startXCoord = parametrs.TopLeftConerX;
-            int startYCoord = parametrs.TopLeftConerY;
-            int width = parametrs.Width;
-            int heidht = parametrs.Height;
-            bool isEmpty = true;
-            
-            for(int yCoord= startYCoord; yCoord< startYCoord + width; yCoord++)
-                for (int xCoord=startXCoord; xCoord< startXCoord +heidht; xCoord++)
-                {
-                    Color pixelColour = new Color();
-                    //try
-                    //{
-                         pixelColour = img.GetPixel(xCoord, yCoord);
-                        isEmpty = false;
-                    //}
-                    /*
-                    catch (ArgumentOutOfRangeException)
-                    {
-                        pixelColour = Color.Transparent;
-                    }
-                    */
-                    result.SetPixel(xCoord - startXCoord, yCoord - startYCoord, pixelColour);
-                }
-            if(isEmpty)
+            byte[] result;
+            Rectangle cropRectangle = new Rectangle(parametrs.TopLeftConerX, parametrs.TopLeftConerY, parametrs.Width, parametrs.Height);
+            using (MemoryStream inStream = new MemoryStream(img))
             {
-                throw new ArgumentException("Пустая область");
+                using (MemoryStream outStream = new MemoryStream())
+                {
+                    // Initialize the ImageFactory using the overload to preserve EXIF metadata.
+                    using (ImageFactory imageFactory = new ImageFactory(preserveExifData: true))
+                    {
+                        // Load, resize, set the format and quality and save an image.
+                        imageFactory.Load(inStream);
+                        if (parametrs.Flip != Flip.None)
+                            if (parametrs.Flip == Flip.Horizontal) imageFactory.Flip(false);
+                            else imageFactory.Flip(true);
+                        if (parametrs.Rotation != Rotation.None)
+                            if (parametrs.Rotation == Rotation.Clockwise) imageFactory.Rotate(90);
+                            else imageFactory.Rotate(-90);
+                        try
+                        {
+                            imageFactory.Crop(cropRectangle);
+                        }
+                        catch (ArgumentOutOfRangeException)
+                        {
+                            throw new ArgumentOutOfRangeException("Пустой квадрат");
+                        }
+                        imageFactory.Save(outStream);
+                    }
+                    // Do something with the stream.
+                    result=outStream.ToArray();
+                }
             }
             return result;
         }
+
+        
     }
 }
