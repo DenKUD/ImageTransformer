@@ -95,6 +95,16 @@ namespace Kontur.ImageTransformer
             // TODO: implement request handling
             string paramString = listenerContext.Request.RawUrl;
             paramString=paramString.Trim('/');
+            if(!paramString.StartsWith("process/"))
+            {
+                //Console.WriteLine(ae.Message);
+                listenerContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+                using (var writer = new StreamWriter(listenerContext.Response.OutputStream))
+                    await writer.WriteLineAsync();
+                throw new ArgumentException("Неправильный запрос");
+            }
+            paramString=paramString.Remove(0, 8);
+            Console.WriteLine(paramString);
             paramString = paramString.Replace('/', ' ');
             byte[] inputImg;
             byte[] outputImg;
