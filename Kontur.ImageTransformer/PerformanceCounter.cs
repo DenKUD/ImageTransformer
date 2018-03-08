@@ -42,7 +42,12 @@ namespace Kontur.ImageTransformer
         {
             lock(_execTime)
             {
-                _averageTime=_execTime.Sum()/_countQuantity;
+                _averageTime = 0;
+                for(int i=0;i<_countQuantity;i++)
+                {
+                    _averageTime += _execTime.Peek();
+                }
+                _averageTime=_averageTime/_countQuantity;
                 _countsSinceLastAvgCalculation = 0;
             }
         }

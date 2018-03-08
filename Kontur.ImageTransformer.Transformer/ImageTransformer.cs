@@ -27,6 +27,8 @@ namespace Kontur.ImageTransformer.Transformer
                     {
                         // Load, resize, set the format and quality and save an image.
                         imageFactory.Load(inStream);
+                        if (imageFactory.Image.Width > 1000 || imageFactory.Image.Height > 1000)
+                            throw new ArgumentException("Слишком большое изображение");
                         if (parametrs.Flip != Flip.None)
                             if (parametrs.Flip == Flip.Horizontal) imageFactory.Flip(false);
                             else imageFactory.Flip(true);

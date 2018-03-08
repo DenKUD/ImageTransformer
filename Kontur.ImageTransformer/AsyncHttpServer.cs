@@ -6,18 +6,16 @@ using System.Threading.Tasks;
 using Kontur.ImageTransformer.Transformer;
 using Kontur.ImageTransformer.Transformer.Model;
 using System.Diagnostics;
-
+using NLog;
 namespace Kontur.ImageTransformer
 {
     internal class AsyncHttpServer : IDisposable
     {
-        private PerformanceCounter performanceCounter;
-        private long _acceptableTimeOfService;
+        
         public AsyncHttpServer()
         {
             listener = new HttpListener();
-            performanceCounter = new PerformanceCounter(1000, 100);
-            _acceptableTimeOfService = 1000;
+  
         }
         
         public void Start(string prefix)
@@ -79,15 +77,7 @@ namespace Kontur.ImageTransformer
                     if (listener.IsListening)
                     {
                         var context = listener.GetContext();
-                        if (performanceCounter.GetAvgTime() <= _acceptableTimeOfService)
-                            Task.Run(() => HandleContextAsync(context));
-                        else
-                        {
-                            context.Response.StatusCode = (int)HttpStatusCode.ServiceUnavailable;
-                            using (var writer = new StreamWriter(context.Response.OutputStream))
-                                writer.WriteLine();
-                            //throw new ArgumentException("Неправильный запрос");
-                        }
+                        Task.Run(() => HandleContextAsync(context));
                     }
                     else Thread.Sleep(0);
                 }
@@ -98,6 +88,8 @@ namespace Kontur.ImageTransformer
                 catch (Exception error)
                 {
                     // TODO: log errors
+                    var logger = LogManager.GetCurrentClassLogger();
+                    logger.Error(error.Message);
                     Console.WriteLine(error.Message);
                 }
             }
@@ -105,8 +97,6 @@ namespace Kontur.ImageTransformer
 
         private async Task HandleContextAsync(HttpListenerContext listenerContext)
         {
-            Stopwatch stopwatch=new Stopwatch();
-            stopwatch.Start();
             // TODO: implement request handling
             string paramString = listenerContext.Request.RawUrl;
             if(listenerContext.Request.HttpMethod!="POST")
@@ -142,6 +132,13 @@ namespace Kontur.ImageTransformer
                 Console.WriteLine(ex.Message);
                 throw new Exception(ex.Message);
             }
+            if(inputImg.LongLength> 100000)// проверка размера файла
+            {
+                listenerContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+                using (var writer = new StreamWriter(listenerContext.Response.OutputStream))
+                    await writer.WriteLineAsync();
+                throw new ArgumentException("Слишком большой файл");
+            }
             try
             {
                 tParams = TransformationParametrs.Parse(paramString);
@@ -169,11 +166,17 @@ namespace Kontur.ImageTransformer
                     await writer.WriteLineAsync();
                 throw new ArgumentOutOfRangeException(aoorEx.Message);
             }
+            catch(ArgumentException argEx)
+            {
+                listenerContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+                using (var writer = new StreamWriter(listenerContext.Response.OutputStream))
+                    await writer.WriteLineAsync();
+                throw new ArgumentException(argEx.Message);
+            }
 
             listenerContext.Response.StatusCode = (int)HttpStatusCode.OK;
             using (var writer = new BinaryWriter(listenerContext.Response.OutputStream))
                 writer.Write(outputImg);
-            await performanceCounter.AddTime(stopwatch.ElapsedMilliseconds);
         }
 
         private readonly HttpListener listener;
