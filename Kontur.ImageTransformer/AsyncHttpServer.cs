@@ -99,88 +99,78 @@ namespace Kontur.ImageTransformer
         {
             // TODO: implement request handling
             string paramString = listenerContext.Request.RawUrl;
-            if(listenerContext.Request.HttpMethod!="POST")
+            if(listenerContext.Request.HttpMethod=="POST")
             {
-                listenerContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                using (var writer = new StreamWriter(listenerContext.Response.OutputStream))
-                    await writer.WriteLineAsync();
-                throw new ArgumentException("Неправильный запрос");
+                if (paramString.StartsWith("/process/"))
+                {
+                    var result = ProcessImage(listenerContext);
+                    using (var writer = new BinaryWriter(result.Item1.Response.OutputStream))
+                        writer.Write(result.Item2);
+                    return;
+                }
             }
-            paramString=paramString.Trim('/');
-            if(!paramString.StartsWith("process/"))
-            {
-                //Console.WriteLine(ae.Message);
-                listenerContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                using (var writer = new StreamWriter(listenerContext.Response.OutputStream))
-                    await writer.WriteLineAsync();
-                throw new ArgumentException("Неправильный запрос");
-            }
-            paramString=paramString.Remove(0, 8);
-            Console.WriteLine(paramString);
-            paramString = paramString.Replace('/', ' ');
+
+            listenerContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+            using (var writer = new StreamWriter(listenerContext.Response.OutputStream))
+                await writer.WriteLineAsync();
+        }
+
+        private Tuple<HttpListenerContext,byte[]> ProcessImage(HttpListenerContext httpContext)
+        {
+            string paramString = httpContext.Request.RawUrl;
             byte[] inputImg;
             byte[] outputImg;
+            paramString = paramString.Remove(0, 9);
+            Console.WriteLine(paramString);
+            paramString = paramString.Replace('/', ' ');
             TransformationParametrs tParams;
             try
             {
                 MemoryStream inStream = new MemoryStream();
-                await listenerContext.Request.InputStream.CopyToAsync(inStream);
+                httpContext.Request.InputStream.CopyTo(inStream);
                 inputImg = inStream.ToArray();
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
                 throw new Exception(ex.Message);
             }
-            if(inputImg.LongLength> 100000)// проверка размера файла
+            if (inputImg.LongLength > 100000)// проверка размера файла
             {
-                listenerContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                using (var writer = new StreamWriter(listenerContext.Response.OutputStream))
-                    await writer.WriteLineAsync();
-                throw new ArgumentException("Слишком большой файл");
+                httpContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+                return new Tuple<HttpListenerContext, byte[]>(httpContext, null);
             }
             try
             {
                 tParams = TransformationParametrs.Parse(paramString);
             }
-            catch(ArgumentException ae)
+            catch (ArgumentException ae)
             {
-                Console.WriteLine(ae.Message);
-                listenerContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                using (var writer = new StreamWriter(listenerContext.Response.OutputStream))
-                    await writer.WriteLineAsync();
-                throw new ArgumentException(ae.Message);
+                httpContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+                return new Tuple<HttpListenerContext, byte[]>(httpContext, null);
             }
 
             ImageTransformer.Transformer.ImageTransformer transformer = new ImageTransformer.Transformer.ImageTransformer();
-           
+
             try
             {
-               outputImg = transformer.Transform(inputImg, tParams);
+                outputImg = transformer.Transform(inputImg, tParams);
             }
-            catch(ArgumentOutOfRangeException aoorEx)
+            catch (ArgumentOutOfRangeException aoorEx)
             {
-                Console.WriteLine(aoorEx.Message);
-                listenerContext.Response.StatusCode = (int)HttpStatusCode.NoContent;
-                using (var writer = new StreamWriter(listenerContext.Response.OutputStream))
-                    await writer.WriteLineAsync();
-                throw new ArgumentOutOfRangeException(aoorEx.Message);
+                httpContext.Response.StatusCode = (int)HttpStatusCode.NoContent;
+                return new Tuple<HttpListenerContext, byte[]>(httpContext, null);
             }
-            catch(ArgumentException argEx)
+            catch (ArgumentException argEx)
             {
-                listenerContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                using (var writer = new StreamWriter(listenerContext.Response.OutputStream))
-                    await writer.WriteLineAsync();
-                throw new ArgumentException(argEx.Message);
+                httpContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+                return new Tuple<HttpListenerContext, byte[]>(httpContext, null);
             }
 
-            listenerContext.Response.StatusCode = (int)HttpStatusCode.OK;
-            using (var writer = new BinaryWriter(listenerContext.Response.OutputStream))
-                writer.Write(outputImg);
+            httpContext.Response.StatusCode = (int)HttpStatusCode.OK;
+            return new Tuple<HttpListenerContext, byte[]>(httpContext, outputImg);
         }
-
         private readonly HttpListener listener;
-
         private Thread listenerThread;
         private bool disposed;
         private volatile bool isRunning;
