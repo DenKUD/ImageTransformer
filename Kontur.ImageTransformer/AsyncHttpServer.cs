@@ -7,65 +7,73 @@ using Kontur.ImageTransformer.Transformer;
 using Kontur.ImageTransformer.Transformer.Model;
 using System.Diagnostics;
 using NLog;
+using Metrics;
+using Metrics.MetricData;
+
+
 namespace Kontur.ImageTransformer
 {
     internal class AsyncHttpServer : IDisposable
     {
         
-        public AsyncHttpServer()
+        public AsyncHttpServer(long accepabletTimeOfService)
         {
-            listener = new HttpListener();
-  
+            _acceptableTimeOfService = accepabletTimeOfService;
+            _listener = new HttpListener();
+            Metric.Config
+            .WithHttpEndpoint("http://localhost:1234/")
+            .WithAllCounters();
+            _processingTimer= Metric.Timer("Image process time", Unit.Requests);
         }
         
         public void Start(string prefix)
-        {
-            lock (listener)
+        {  
+            lock (_listener)
             {
-                if (!isRunning)
+                if (!_isRunning)
                 {
-                    listener.Prefixes.Clear();
-                    listener.Prefixes.Add(prefix);
-                    listener.Start();
+                    _listener.Prefixes.Clear();
+                    _listener.Prefixes.Add(prefix);
+                    _listener.Start();
 
-                    listenerThread = new Thread(Listen)
+                    _listenerThread = new Thread(Listen)
                     {
                         IsBackground = true,
                         Priority = ThreadPriority.Highest
                     };
-                    listenerThread.Start();
+                    _listenerThread.Start();
                     
-                    isRunning = true;
+                    _isRunning = true;
                 }
             }
         }
 
         public void Stop()
         {
-            lock (listener)
+            lock (_listener)
             {
-                if (!isRunning)
+                if (!_isRunning)
                     return;
 
-                listener.Stop();
+                _listener.Stop();
 
-                listenerThread.Abort();
-                listenerThread.Join();
+                _listenerThread.Abort();
+                _listenerThread.Join();
                 
-                isRunning = false;
+                _isRunning = false;
             }
         }
 
         public void Dispose()
         {
-            if (disposed)
+            if (_disposed)
                 return;
 
-            disposed = true;
+            _disposed = true;
 
             Stop();
 
-            listener.Close();
+            _listener.Close();
         }
         
         private void Listen()
@@ -74,9 +82,9 @@ namespace Kontur.ImageTransformer
             {
                 try
                 {
-                    if (listener.IsListening)
-                    {
-                        var context = listener.GetContext();
+                    if (_listener.IsListening)
+                    { 
+                        var context = _listener.GetContext();
                         Task.Run(() => HandleContextAsync(context));
                     }
                     else Thread.Sleep(0);
@@ -87,7 +95,7 @@ namespace Kontur.ImageTransformer
                 }
                 catch (Exception error)
                 {
-                    // TODO: log errors
+                    //log errors
                     var logger = LogManager.GetCurrentClassLogger();
                     logger.Error(error.Message);
                     Console.WriteLine(error.Message);
@@ -97,22 +105,35 @@ namespace Kontur.ImageTransformer
 
         private async Task HandleContextAsync(HttpListenerContext listenerContext)
         {
-            // TODO: implement request handling
-            string paramString = listenerContext.Request.RawUrl;
-            if(listenerContext.Request.HttpMethod=="POST")
+            //request handling
+            var time = ValueReader.GetCurrentValue(_processingTimer).Scale(TimeUnit.Milliseconds,TimeUnit.Milliseconds);
+            using (_processingTimer.NewContext())
             {
-                if (paramString.StartsWith("/process/"))
+                if(time.Histogram.Percentile95 < _acceptableTimeOfService)
                 {
-                    var result = ProcessImage(listenerContext);
-                    using (var writer = new BinaryWriter(result.Item1.Response.OutputStream))
-                        writer.Write(result.Item2);
-                    return;
+                    string paramString = listenerContext.Request.RawUrl;
+                    if (listenerContext.Request.HttpMethod == "POST")
+                    {
+                        if (paramString.StartsWith("/process/"))
+                        {
+                            var result = ProcessImage(listenerContext);
+                            using (var writer = new BinaryWriter(result.Item1.Response.OutputStream))
+                                writer.Write(result.Item2);
+                            return;
+                        }
+                    }
+
+                    listenerContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+                    using (var writer = new StreamWriter(listenerContext.Response.OutputStream))
+                        await writer.WriteLineAsync();
+                }
+                else
+                {
+                    listenerContext.Response.StatusCode = (int)HttpStatusCode.ServiceUnavailable;
+                    using (var writer = new StreamWriter(listenerContext.Response.OutputStream))
+                        await writer.WriteLineAsync();
                 }
             }
-
-            listenerContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-            using (var writer = new StreamWriter(listenerContext.Response.OutputStream))
-                await writer.WriteLineAsync();
         }
 
         private Tuple<HttpListenerContext,byte[]> ProcessImage(HttpListenerContext httpContext)
@@ -170,9 +191,12 @@ namespace Kontur.ImageTransformer
             httpContext.Response.StatusCode = (int)HttpStatusCode.OK;
             return new Tuple<HttpListenerContext, byte[]>(httpContext, outputImg);
         }
-        private readonly HttpListener listener;
-        private Thread listenerThread;
-        private bool disposed;
-        private volatile bool isRunning;
+        private readonly HttpListener _listener;
+        private Thread _listenerThread;
+        private bool _disposed;
+        private volatile bool _isRunning;
+        private readonly Metrics.Timer _processingTimer;
+        private Double _acceptableTimeOfService;
+
     }
 }
