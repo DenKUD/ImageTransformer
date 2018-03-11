@@ -5,7 +5,6 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Kontur.ImageTransformer.Transformer.Model;
-using System.Drawing.Imaging;
 using ImageProcessor;
 using System.IO;
 
