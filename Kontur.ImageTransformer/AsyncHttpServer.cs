@@ -23,7 +23,7 @@ namespace Kontur.ImageTransformer
             Metric.Config
             .WithHttpEndpoint("http://localhost:1234/")
             .WithAllCounters();
-            _processingTimer= Metric.Timer("Image process time", Unit.Requests);
+            _processingTimer= Metric.Timer("Image process time", Unit.Requests,SamplingType.LongTerm,TimeUnit.Seconds,TimeUnit.Milliseconds);
         }
         
         public void Start(string prefix)
@@ -106,10 +106,13 @@ namespace Kontur.ImageTransformer
         private async Task HandleContextAsync(HttpListenerContext listenerContext)
         {
             //request handling
-            var time = ValueReader.GetCurrentValue(_processingTimer).Scale(TimeUnit.Milliseconds,TimeUnit.Milliseconds);
             using (_processingTimer.NewContext())
             {
-                if(time.Histogram.Percentile95 < _acceptableTimeOfService)
+                var time = ValueReader.GetCurrentValue(_processingTimer)
+                .Scale(TimeUnit.Milliseconds,TimeUnit.Milliseconds)
+                .Histogram.Percentile95;
+            
+                if(time < _acceptableTimeOfService)
                 {
                     string paramString = listenerContext.Request.RawUrl;
                     if (listenerContext.Request.HttpMethod == "POST")
@@ -142,7 +145,6 @@ namespace Kontur.ImageTransformer
             byte[] inputImg;
             byte[] outputImg;
             paramString = paramString.Remove(0, 9);
-            Console.WriteLine(paramString);
             paramString = paramString.Replace('/', ' ');
             TransformationParametrs tParams;
             try
@@ -195,7 +197,7 @@ namespace Kontur.ImageTransformer
         private Thread _listenerThread;
         private bool _disposed;
         private volatile bool _isRunning;
-        private readonly Metrics.Timer _processingTimer;
+        private volatile Metrics.Timer _processingTimer;
         private Double _acceptableTimeOfService;
 
     }
